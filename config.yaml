@@ -1,0 +1,69 @@
+app:
+  name: "waf-project"
+  version: "1.0.0"
+
+detection_api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  api_keys:
+    - "waf-key-dev-001"
+    - "waf-key-dev-002"
+
+update_api:
+  host: "0.0.0.0"
+  port: 8001
+  workers: 2
+  api_keys:
+    - "waf-admin-key-001"
+
+model:
+  vocab_size: 10000
+  embed_dim: 256
+  num_heads: 8
+  num_layers: 4
+  max_seq_len: 512
+  dropout: 0.1
+  threshold: 0.75
+  checkpoint_dir: "models/checkpoints"
+
+training:
+  batch_size: 32
+  learning_rate: 0.0001
+  epochs: 50
+  early_stopping_patience: 5
+  val_split: 0.1
+  device: "auto"
+
+preprocessing:
+  dynamic_patterns:
+    - '(\d{1,3}\.){3}\d{1,3}'
+    - '\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}'
+    - '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}'
+    - '[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}'
+    - '\d{10,}'
+  replacement_tokens:
+    ip: "<IP>"
+    timestamp: "<TS>"
+    uuid: "<UUID>"
+    jwt: "<TOKEN>"
+    numeric: "<NUM>"
+
+storage:
+  db_path: "data/detections.db"
+  max_events: 100000
+
+redis:
+  host: "redis"
+  port: 6379
+  db: 0
+  rate_limit:
+    requests: 100
+    window_seconds: 60
+
+nginx:
+  upstream_detection: "http://waf-api:8000"
+  upstream_update: "http://waf-update-api:8001"
+  upstream_app1: "http://sample-app-1:5001"
+  upstream_app2: "http://sample-app-2:5002"
+  upstream_app3: "http://sample-app-3:5003"

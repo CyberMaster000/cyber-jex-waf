@@ -1,0 +1,107 @@
+version: "3.8"
+
+services:
+  waf-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: waf-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./models/checkpoints:/app/models/checkpoints
+      - ./config.yaml:/app/config.yaml
+    environment:
+      - WAF_CONFIG_PATH=/app/config.yaml
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - waf-network
+    restart: unless-stopped
+
+  waf-update-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: waf-update-api
+    command: ["uvicorn", "src.api.update_api:app", "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./models/checkpoints:/app/models/checkpoints
+      - ./config.yaml:/app/config.yaml
+    environment:
+      - WAF_CONFIG_PATH=/app/config.yaml
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - waf-network
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: waf-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./integration/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - waf-api
+      - waf-update-api
+      - sample-app-1
+      - sample-app-2
+      - sample-app-3
+    networks:
+      - waf-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: waf-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - waf-network
+    restart: unless-stopped
+
+  sample-app-1:
+    build:
+      context: ./sample_apps/app1
+      dockerfile: Dockerfile
+    container_name: sample-app-1
+    networks:
+      - waf-network
+    restart: unless-stopped
+
+  sample-app-2:
+    build:
+      context: ./sample_apps/app2
+      dockerfile: Dockerfile
+    container_name: sample-app-2
+    networks:
+      - waf-network
+    restart: unless-stopped
+
+  sample-app-3:
+    build:
+      context: ./sample_apps/app3
+      dockerfile: Dockerfile
+    container_name: sample-app-3
+    networks:
+      - waf-network
+    restart: unless-stopped
+
+networks:
+  waf-network:
+    driver: bridge
