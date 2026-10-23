@@ -3,12 +3,16 @@ Unit and integration tests for Sentinel Transformer WAF.
 Runs with the standard Python unittest module.
 """
 import unittest
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from src.api.detection_api import app
 
+MODEL_WEIGHTS = Path("models/securebert_clf/model.safetensors")
 
+
+@unittest.skipUnless(MODEL_WEIGHTS.exists(), "SecureBERT weights are not present")
 class TestSentinelWAF(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
