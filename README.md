@@ -300,4 +300,4 @@ ARCHITECTURE.md              component and scaling design
 
 ## 10. Authors
 
-Nikhil Gupta — Smart India Hackathon 2026, Problem Statement 25172.
+Nikhil Gupta
