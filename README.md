@@ -3,9 +3,6 @@
 Transformer-assisted Web Application Firewall (WAF) with inline enforcement,
 a live security dashboard, and an admin retraining API.
 
-**Problem Statement:** 25172 — Transformer-Based End-to-End Web Application
-Firewall (WAF) Pipeline
-**Event:** Smart India Hackathon 2026
 
 This repository is an honest engineering prototype. It is not a production
 WAF yet; the limitations are documented at the end of this file.

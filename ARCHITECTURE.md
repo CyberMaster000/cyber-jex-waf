@@ -33,7 +33,7 @@
 
 ## Scaling path
 
-The current single-node design is intentional for a hackathon. To scale:
+The current single-node design is suitable for a controlled deployment. To scale:
 
 1. Move events/training samples to PostgreSQL.
 2. Run multiple detection/gateway replicas behind nginx/HAProxy.
