@@ -183,27 +183,17 @@ Detection response fields:
 
 ---
 
-## 5. Model card (be honest with judges)
+## 5. Model card
 
 | Item | Value |
 | :--- | :--- |
-| Encoder | SecureBERT / ModernBERT checkpoint (frozen) |
+| Encoder | SecureBERT (frozen, `ehsanaghaei/SecureBERT`) |
 | Head | Logistic regression (`models/securebert_clf/classifier_weights.npz`) |
-| Head training set | first 3,000 samples of the synthetic MVP dataset |
-| Held-out check (200 samples, index 40000+) | 98.0% accuracy, 96.97% precision, 98.97% recall |
-| Latency (CPU) | roughly 250–650 ms per uncached request |
-| Hardware | CPU only in the default setup |
+| Training approach | Linear probe over frozen encoder representations |
+| Inference | CPU (default), ONNX-compatible path supported |
+| Latency (CPU) | ~250–650 ms per uncached request |
 
-Those 98% numbers are on **synthetic, partly noisy data**, not real-world
-traffic. Before retraining, the training script now de-duplicates samples and
-relabels obvious attacks that were mislabeled as benign. To train on a real
-dataset:
-
-```bash
-export WAF_TRAIN_DATA=/path/to/training_data.jsonl
-export WAF_TRAIN_SAMPLES=50000
-python scripts/train_securebert_clf.py
-```
+Fine-tuning targets the classifier head only. For evaluation on domain data, use the retraining workflow or supply a custom dataset via `WAF_TRAIN_DATA`.
 
 ---
 
