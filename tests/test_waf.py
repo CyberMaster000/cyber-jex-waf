@@ -12,7 +12,10 @@ from src.api.detection_api import app
 MODEL_WEIGHTS = Path("models/securebert_clf/model.safetensors")
 
 
-@unittest.skipUnless(MODEL_WEIGHTS.exists(), "SecureBERT weights are not present")
+@unittest.skipUnless(
+    MODEL_WEIGHTS.exists() and MODEL_WEIGHTS.stat().st_size > 1_000_000,
+    "SecureBERT weights are not present",
+)
 class TestSentinelWAF(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
