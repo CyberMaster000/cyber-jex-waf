@@ -17,9 +17,6 @@ models/**/*.bak
 models/**/*.tmp.npz
 certs/
 backups/
-models/checkpoints/
-models/**/*.pt
-models/**/*.safetensors
-models/**/*.npz
 
 *.bak
+models/checkpoints/modernbert_backup/
