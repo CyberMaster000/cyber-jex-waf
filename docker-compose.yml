@@ -1,23 +1,65 @@
-version: "3.8"
-
 services:
   waf-api:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: waf-api
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./models/checkpoints:/app/models/checkpoints
-      - ./config.yaml:/app/config.yaml
+      - ./models/securebert_clf:/app/models/securebert_clf
+      - ./config.yaml:/app/config.yaml:ro
+      - ./src:/app/src:ro
     environment:
       - WAF_CONFIG_PATH=/app/config.yaml
+      - WAF_API_KEY_1=${WAF_API_KEY_1:-waf-key-dev-001}
+      - WAF_API_KEY_2=${WAF_API_KEY_2:-waf-key-dev-002}
+      - WAF_DASH_USER=${WAF_DASH_USER:-sentinel}
+      - WAF_DASH_PASSWORD=${WAF_DASH_PASSWORD:-change-me}
+      - WAF_METRICS_TOKEN=${WAF_METRICS_TOKEN:-}
+      - WAF_LOG_JSON=${WAF_LOG_JSON:-false}
+      - WAF_LOG_LEVEL=${WAF_LOG_LEVEL:-INFO}
     depends_on:
       redis:
         condition: service_healthy
+    networks:
+      - waf-network
+    restart: unless-stopped
+
+  waf-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: waf-gateway
+    command: ["uvicorn", "src.api.gateway:app", "--host", "0.0.0.0", "--port", "8002"]
+    expose:
+      - "8002"
+    environment:
+      - WAF_DETECTION_URL=http://waf-api:8000
+      - WAF_BACKEND_URL=${WAF_BACKEND_URL:-http://sample-app-1:5001}
+      - WAF_API_KEY=${WAF_API_KEY_1:-waf-key-dev-001}
+      - WAF_REDIS_URL=redis://:${REDIS_PASSWORD:-change-me}@redis:6379/0
+      - WAF_RATE_LIMIT=${WAF_RATE_LIMIT:-100}
+      - WAF_RATE_WINDOW=${WAF_RATE_WINDOW:-60}
+      - WAF_MAX_BODY_BYTES=${WAF_MAX_BODY_BYTES:-1048576}
+      - WAF_IP_ALLOWLIST=${WAF_IP_ALLOWLIST:-}
+      - WAF_IP_BLOCKLIST=${WAF_IP_BLOCKLIST:-}
+      - WAF_METRICS_TOKEN=${WAF_METRICS_TOKEN:-}
+      - WAF_LOG_JSON=${WAF_LOG_JSON:-false}
+      - WAF_LOG_LEVEL=${WAF_LOG_LEVEL:-INFO}
+    depends_on:
+      waf-api:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health/live', timeout=3)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - waf-network
     restart: unless-stopped
@@ -28,15 +70,20 @@ services:
       dockerfile: Dockerfile
     container_name: waf-update-api
     command: ["uvicorn", "src.api.update_api:app", "--host", "0.0.0.0", "--port", "8001"]
-    ports:
-      - "8001:8001"
+    expose:
+      - "8001"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./models/checkpoints:/app/models/checkpoints
-      - ./config.yaml:/app/config.yaml
+      - ./models/securebert_clf:/app/models/securebert_clf
+      - ./config.yaml:/app/config.yaml:ro
+      - ./src:/app/src:ro
     environment:
       - WAF_CONFIG_PATH=/app/config.yaml
+      - WAF_ADMIN_KEY_1=${WAF_ADMIN_KEY_1:-waf-admin-key-001}
+      - WAF_LOG_JSON=${WAF_LOG_JSON:-false}
+      - WAF_LOG_LEVEL=${WAF_LOG_LEVEL:-INFO}
     depends_on:
       redis:
         condition: service_healthy
@@ -48,15 +95,25 @@ services:
     image: nginx:alpine
     container_name: waf-nginx
     ports:
-      - "80:80"
+      - "${WAF_HTTP_PORT:-80}:80"
+      - "${WAF_HTTPS_PORT:-443}:443"
     volumes:
       - ./integration/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
     depends_on:
-      - waf-api
-      - waf-update-api
-      - sample-app-1
-      - sample-app-2
-      - sample-app-3
+      waf-api:
+        condition: service_started
+      waf-update-api:
+        condition: service_started
+      waf-gateway:
+        condition: service_started
+      sample-app-1:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- --no-check-certificate https://127.0.0.1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - waf-network
     restart: unless-stopped
@@ -64,13 +121,16 @@ services:
   redis:
     image: redis:7-alpine
     container_name: waf-redis
-    ports:
-      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-change-me}"]
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-change-me}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD:-change-me} ping | grep PONG"]
       interval: 5s
       timeout: 3s
       retries: 5
+    volumes:
+      - redis-data:/data
     networks:
       - waf-network
     restart: unless-stopped
@@ -101,6 +161,9 @@ services:
     networks:
       - waf-network
     restart: unless-stopped
+
+volumes:
+  redis-data:
 
 networks:
   waf-network:

@@ -11,6 +11,12 @@ from torch.utils.data import DataLoader, Dataset, random_split
 from src.models.transformer import TransformerAutoencoder
 from src.preprocessing.tokenizer import Tokenizer, SPECIAL_TOKENS
 from src.utils.config import get_settings
+from src.utils.device import get_device, is_tpu, save_checkpoint
+
+try:
+    import torch_xla.core.xla_model as xm
+except ImportError:
+    xm = None
 
 
 class RequestDataset(Dataset):
@@ -38,13 +44,10 @@ class ModelTrainer:
         device: Optional[str] = None,
     ):
         settings = get_settings()
-        if device is None:
-            if settings.training.device == "auto":
-                self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            else:
-                self.device = torch.device(settings.training.device)
+        if device is not None:
+            self.device = get_device(device)
         else:
-            self.device = torch.device(device)
+            self.device = get_device(settings.training.device)
 
         if model is None:
             self.model = TransformerAutoencoder(
@@ -159,7 +162,12 @@ class ModelTrainer:
                 loss = loss_fn(logits.view(-1, logits.size(-1)), batch_tgt.view(-1))
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-                optimizer.step()
+
+                if is_tpu(self.device):
+                    xm.optimizer_step(optimizer)
+                    xm.mark_step()
+                else:
+                    optimizer.step()
 
                 epoch_loss += loss.item()
                 n_batches += 1
@@ -179,6 +187,9 @@ class ModelTrainer:
                     loss = loss_fn(logits.view(-1, logits.size(-1)), batch_tgt.view(-1))
                     val_loss += loss.item()
                     n_val += 1
+
+            if is_tpu(self.device):
+                xm.mark_step()
 
             avg_val_loss = val_loss / max(n_val, 1)
 
@@ -201,7 +212,7 @@ class ModelTrainer:
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 patience_counter = 0
-                self.model.save(metrics={"best_val_loss": best_val_loss, "epoch": epoch + 1})
+                self.model.save(metrics={"best_val_loss": best_val_loss, "epoch": epoch + 1}, device=self.device)
             else:
                 patience_counter += 1
                 if patience_counter >= settings.training.early_stopping_patience:
@@ -216,7 +227,7 @@ class ModelTrainer:
             "best_val_loss": best_val_loss,
             "optimal_threshold": new_threshold,
             "total_samples": len(sequences),
-        })
+        }, device=self.device)
 
         self._training = False
         self._progress = {

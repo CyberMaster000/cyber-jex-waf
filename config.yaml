@@ -7,25 +7,36 @@ detection_api:
   port: 8000
   workers: 4
   api_keys:
-    - "waf-key-dev-001"
-    - "waf-key-dev-002"
+    - "${WAF_API_KEY_1:-waf-key-dev-001}"
+    - "${WAF_API_KEY_2:-waf-key-dev-002}"
+  admin_api_keys:
+    - "${WAF_ADMIN_KEY_1:-waf-admin-key-001}"
+  dashboard_username: "${WAF_DASH_USER:-sentinel}"
+  dashboard_password: "${WAF_DASH_PASSWORD:-change-me}"
+  require_dashboard_auth: true
 
 update_api:
   host: "0.0.0.0"
   port: 8001
   workers: 2
   api_keys:
-    - "waf-admin-key-001"
+    - "${WAF_ADMIN_KEY_1:-waf-admin-key-001}"
 
 model:
-  vocab_size: 10000
-  embed_dim: 256
-  num_heads: 8
-  num_layers: 4
+  type: "securebert"
+  securebert_path: "models/securebert_clf"
+  modernbert_path: "models/checkpoints/modernbert"
+  vocab_size: 50368
+  embed_dim: 768
+  num_heads: 12
+  num_layers: 22
   max_seq_len: 512
   dropout: 0.1
-  threshold: 0.75
+  threshold: -1.0
+  benign_suppression: true
+  suppression_max_score: 9.5
   checkpoint_dir: "models/checkpoints"
+  calibration_file: "models/securebert_clf/calibration.json"
 
 training:
   batch_size: 32
@@ -52,11 +63,19 @@ preprocessing:
 storage:
   db_path: "data/detections.db"
   max_events: 100000
+  redact_sensitive: true
+
+security:
+  max_body_bytes: 1048576
+  max_path_length: 4096
+  max_header_count: 100
+  max_header_bytes: 32768
 
 redis:
   host: "redis"
   port: 6379
   db: 0
+  enabled: true
   rate_limit:
     requests: 100
     window_seconds: 60

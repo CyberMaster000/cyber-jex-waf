@@ -7,11 +7,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p /app/data /app/logs /app/models/checkpoints
+RUN mkdir -p /app/data /app/logs /app/models/checkpoints && \
+    useradd --create-home --uid 1000 app && \
+    chown -R app:app /app
+
+USER app
 
 EXPOSE 8000
 

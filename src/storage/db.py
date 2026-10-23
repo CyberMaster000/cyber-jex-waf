@@ -31,6 +31,8 @@ class Database:
     def __init__(self, db_path: Optional[str] = None):
         settings = get_settings()
         self.db_path = db_path or settings.storage.db_path
+        self.max_events = int(getattr(settings.storage, "max_events", 100000))
+        self._writes_since_prune = 0
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
@@ -103,6 +105,13 @@ class Database:
                     event.latency_ms,
                 ),
             )
+        self._writes_since_prune += 1
+        if self._writes_since_prune >= 1000:
+            self._writes_since_prune = 0
+            try:
+                self.prune_old_events(self.max_events)
+            except Exception as exc:  # pragma: no cover - maintenance best effort
+                logger.warning("Failed to prune old events: {}", exc)
         logger.debug("Stored detection event {}", event.request_id)
         return event.request_id
 
@@ -131,7 +140,19 @@ class Database:
 
         with self._conn() as conn:
             rows = conn.execute(query, params).fetchall()
-            return [dict(row) for row in rows]
+            events = []
+            for row in rows:
+                event = dict(row)
+                for field in ("query_params", "headers"):
+                    value = event.get(field)
+                    if isinstance(value, str):
+                        try:
+                            event[field] = json.loads(value)
+                        except Exception:
+                            event[field] = {}
+                event["is_anomaly"] = bool(event.get("is_anomaly"))
+                events.append(event)
+            return events
 
     def get_event_by_id(self, request_id: str) -> Optional[dict[str, Any]]:
         with self._conn() as conn:
@@ -192,6 +213,13 @@ class Database:
                     (to_delete,),
                 )
                 logger.info("Pruned {} old detection events", to_delete)
+
+    def clear_events(self) -> int:
+        with self._conn() as conn:
+            count = conn.execute("SELECT COUNT(*) FROM detections").fetchone()[0]
+            conn.execute("DELETE FROM detections")
+            logger.info("Cleared all {} detection events from database", count)
+            return count
 
 
 db_instance: Optional[Database] = None
