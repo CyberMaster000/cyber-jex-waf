@@ -106,6 +106,7 @@ python scripts/load_test.py --requests 200 --concurrency 20
 ## 3. Docker stack (inline enforcement)
 
 ```bash
+git lfs install && git lfs pull  # fetch model weights if not pulled
 cp .env.example .env          # change every secret
 ./scripts/generate-self-signed.sh   # staging only; use a real cert in production
 docker compose up -d --build
